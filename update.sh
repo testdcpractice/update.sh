@@ -45,7 +45,7 @@ function create_planr_old_dir() {
         mv -f $WORK_DIR/dppm/planr_old $WORK_DIR/dppm/planr_old-$(date +%H:%M)
         #Создадим папку planr_old в директории $WORK_DIR/dppm/
         mkdir $WORK_DIR/dppm/planr_old
-        #проверка создания каталога развёртывания
+        #проверка создания каталога planr_old
         if [ $? -eq 0 ]; then
           echo "Каталог $WORK_DIR/dppm/planr_old создан"
         else
