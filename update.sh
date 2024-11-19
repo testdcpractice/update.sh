@@ -49,7 +49,7 @@ function create_planr_old_dir() {
         if [ $? -eq 0 ]; then
           echo "Каталог $WORK_DIR/dppm/planr_old создан"
         else
-          echo "Ошибка! Не удалось создать каталог развёртывания"
+          echo "Ошибка! Не удалось создать каталог planr_old"
           exit 1
         fi     
       else
