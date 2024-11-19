@@ -120,7 +120,6 @@ fi
 check_var "FILE_PATH"
 check_var "WORK_DIR"
 
-
 #Проверка, есть ли старая папка images
 ls $WORK_DIR/dppm | grep images
 if [ $? -eq 0 ]; then
