@@ -3,6 +3,9 @@ FILE_PATH=""
 WORK_DIR=""
 PASSWORD="planr"
 SET_FILE=./.set
+LOGGING_DIR=false
+BACKUP=false
+CRON_TASK=false
 
 #Тестовый массив для сравнения  
 PLANR_STRUCTURE=(images planr)
@@ -13,6 +16,9 @@ function help() {
   echo -e "    \033[1mФлаги:\033[0m"  
   echo "    -f    Директория в которой находится архив с дистрибутивом или установочные файлы"
   echo "    -w    Директория развёртывания"
+  echo "    -b    Создание бэкапа базы данных. Установить в значение true или false"
+  echo "    -l    Если, LOGGING_DIR=true, то каталоги и конфигурации fluent-bit и loki не обновляются"
+  echo "    -c    Если, CRON_TASK=true, создаётся запись в планировщике crontab для периодического бэкапа базы данных"
   echo "    -h    Справка"
 }
 
@@ -37,25 +43,21 @@ function create_planr_old_dir() {
   if [ -e $FILE_PATH ]; then
     #Проверка,что директория WORK_DIR существует
     if [ -d $WORK_DIR ]; then
-      #Проверка, существует ли в целевой директории, ранее созданная папка planr_old
-      if [ -d $WORK_DIR/dppm/planr_old ]; then
-        echo "Обнаружена ранее созданная директория $WORK_DIR/dppm/planr_old"
-        echo "Ранее созданная директория $WORK_DIR/dppm/planr_old переименована в planr_old-$(date +%H:%M)"
-        #Переименование старой директории planr_old
-        mv -f $WORK_DIR/dppm/planr_old $WORK_DIR/dppm/planr_old-$(date +%H:%M)
-        #Создадим папку planr_old в директории $WORK_DIR/dppm/
-        mkdir $WORK_DIR/dppm/planr_old
-        #проверка создания каталога planr_old
+      #Проверка, существует ли в целевой директории, ранее созданная папка planr_old/planr
+      if [ -d $WORK_DIR/dppm/planr_old/planr ]; then
+        echo "Обнаружена ранее созданная директория $WORK_DIR/dppm/planr_old/planr"
+        echo "Ранее созданная директория $WORK_DIR/dppm/planr_old/planr переименована в planr-$(date +%H:%M)"
+        mv -f $WORK_DIR/dppm/planr_old/planr $WORK_DIR/dppm/planr_old/planr-$(date +%H:%M)
         if [ $? -eq 0 ]; then
-          echo "Каталог $WORK_DIR/dppm/planr_old создан"
+         echo "Ранее созданная директория $WORK_DIR/dppm/planr_old/planr переименована в planr-$(date +%H:%M)"
         else
-          echo "Ошибка! Не удалось создать каталог planr_old"
+          echo "Ошибка! Не удалось переименовать директорию $WORK_DIR/dppm/planr_old/planr"
           exit 1
-        fi     
+        fi        
       else
         #Создадим папку planr_old в директории $WORK_DIR/dppm/
         mkdir $WORK_DIR/dppm/planr_old
-        #проверка создания каталога planr_old
+        #проверка создания каталога развёртывания
         if [ $? -eq 0 ]; then
           echo "Каталог $WORK_DIR/dppm/planr_old создан"
         else
@@ -74,30 +76,65 @@ function create_planr_old_dir() {
 }
 
 #Передача параметров командной строки в скрипт с помощью флагов  
-while getopts "f:w:h" Option
-  do
-    case $Option in
-      f     )
-             if [ ! -e "$OPTARG" ]; then
-               echo "Ошибка! Архив с дистрибутивом или установочные файлы не найдены в указанной директории $OPTARG"
-               exit 1
-             fi
-             FILE_PATH=$OPTARG;;  
-      w     )
-             if [ ! -d "$OPTARG" ]; then
-               echo "Ошибка! $OPTARG не создан или это не директория"
-               exit 1
-             fi
-             WORK_DIR=$OPTARG;;
-      h     )
-             help
-             exit 1;;       
-      *     )
-             echo "Ошибка! Неизвестный флаг или флаг требует аргумента"
-             help
-             exit 1;;            
+while getopts "f:w:b:l:c:h" Option
+do
+  case $Option in
+    f     )
+            if [ ! -e "$OPTARG" ]; then
+              echo "Ошибка! Архив с дистрибутивом или установочные файлы не найдены в указанной директории $OPTARG"
+              exit 1
+            fi
+            FILE_PATH=$OPTARG;;  
+    w     )
+            if [ ! -d "$OPTARG" ]; then
+              echo "Ошибка! $OPTARG не создан или это не директория"
+              exit 1
+            fi
+            WORK_DIR=$OPTARG;;
+    b     )
+            if [[ "$OPTARG" != "true" && "$OPTARG" != "false" ]]; then
+              echo "Ошибка! Не присвоенно значение true или false флагу -b"
+              exit 1
+            fi
+            BACKUP=$OPTARG;;
+    l     )
+            if [[ "$OPTARG" != "true" && "$OPTARG" != "false" ]]; then
+              echo "Ошибка! Не присвоенно значение true или false флагу -l"
+              exit 1
+            fi
+            LOGGING_DIR=$OPTARG;;
+    c     )
+            if [[ "$OPTARG" != "true" && "$OPTARG" != "false" ]]; then
+                echo "Ошибка! Значение флага -c должно быть true или false"
+                exit 1
+            fi
+            CRON_TASK=$OPTARG;;
+    h     )
+            help
+            exit 1;;                                         
+    *     )
+            echo "Ошибка! Неизвестный флаг или флаг требует аргумента"
+            help
+            exit 1;;            
     esac
-done 
+done
+
+#Создание бэкапа базы данных, перед обновлением
+if [ ${BACKUP} = true ]; then
+  if [ -d $WORK_DIR/dppm/planr/scripts ]; then
+    #Переходим в директорию со скриптами
+    cd $WORK_DIR/dppm/planr/scripts
+    #./dump.sh создаст бэкап базы данных на текущий момент
+    ./dump.sh -p /opt/dppm/postgres_dump
+    if [ $? -eq 0 ]; then
+      echo "Бэкап базы данных успешно создан"
+    else
+      echo "Ошибка! Не удалось создать бэкап базы данных"  
+    fi
+  else
+    echo "Ошибка! Не удалось найти директорию $WORK_DIR/dppm/planr/scripts"
+  fi      
+fi
 
 #Проверка статуса: запущен Plan-R или нет
 docker ps | grep planr > /dev/null
@@ -119,6 +156,7 @@ fi
 
 check_var "FILE_PATH"
 check_var "WORK_DIR"
+
 
 #Проверка, есть ли старая папка images
 ls $WORK_DIR/dppm | grep images
@@ -174,6 +212,29 @@ else
     echo "Ошибка! Проверьте значение или содержимое FILE_PATH"
     exit 1 
   fi 
+fi
+
+#LOGGING_DIR=TRUE
+if [ ${LOGGING_DIR} = true ]; then
+  if [ -d $WORK_DIR/dppm/planr_old/planr/logging/fluent-bit ] && [ -d $WORK_DIR/dppm/planr/logging ]; then
+    cp -r $WORK_DIR/dppm/planr_old/planr/logging/fluent-bit $WORK_DIR/dppm/planr/logging
+    cp -r $WORK_DIR/dppm/planr_old/planr/logging/loki $WORK_DIR/dppm/planr/logging
+  else
+    echo "Ошибка! Не удалось переместить папки fluent-bit и loki в директорию $WORK_DIR/dppm/planr/logging"
+    echo "Проверьте наличие и содержимое целевых каталогов"
+  fi  
+fi
+
+# Добавление задания в crontab, если флаг -c true
+if [ ${CRON_TASK} = true ]; then
+#Комнда tee записывает вывод команды echo в файл /etc/crontab
+#флаг -a указывает, что строка добавляется в конец файла
+echo "0 3 * * * root $WORK_DIR/dppm/planr/scripts/dump.sh -c postgres -p $WORK_DIR/dppm/postgres_dump/ -r 14 -k 5" | sudo tee -a /etc/crontab
+if [ $? -eq 0 ]; then
+  echo "В crontab успешно добавлено задание для автоматического бэкапа базы данных"
+else
+  echo "Ошибка! Не удалось добавить задание в crontab"
+  exit 1
 fi
 
 #Загруза образов
