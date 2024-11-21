@@ -119,6 +119,19 @@ do
     esac
 done
 
+#xargs преобразует строки из файла .set в формат переменных окружения для export
+#export экспортирует значения переменных в intsall.sh
+export $(grep -v '^#' $SET_FILE | xargs) > /dev/null
+if [ $? -eq 0 ]; then
+  echo "Переменные окружения экспортированы из $SET_FILE"
+else
+  echo "Ошибка! Не удалось экспортировать переменные окружения из файла .set"
+  exit 1
+fi
+
+check_var "FILE_PATH"
+check_var "WORK_DIR"
+
 #Создание бэкапа базы данных, перед обновлением
 if [ ${BACKUP} = true ]; then
   if [ -d $WORK_DIR/dppm/planr/scripts ]; then
@@ -143,20 +156,6 @@ if [ $? -eq 0 ]; then
   echo "Выполните скрипт ./stop.sh в директории разворота"
   exit 1
 fi  
-
-#xargs преобразует строки из файла .set в формат переменных окружения для export
-#export экспортирует значения переменных в intsall.sh
-export $(grep -v '^#' $SET_FILE | xargs) > /dev/null
-if [ $? -eq 0 ]; then
-  echo "Переменные окружения экспортированы из $SET_FILE"
-else
-  echo "Ошибка! Не удалось экспортировать переменные окружения из файла .set"
-  exit 1
-fi
-
-check_var "FILE_PATH"
-check_var "WORK_DIR"
-
 
 #Проверка, есть ли старая папка images
 ls $WORK_DIR/dppm | grep images
