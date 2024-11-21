@@ -142,10 +142,12 @@ if [ ${BACKUP} = true ]; then
     if [ $? -eq 0 ]; then
       echo "Бэкап базы данных успешно создан"
     else
-      echo "Ошибка! Не удалось создать бэкап базы данных"  
+      echo "Ошибка! Не удалось создать бэкап базы данных"
+      exit 1  
     fi
   else
     echo "Ошибка! Не удалось найти директорию $WORK_DIR/dppm/planr/scripts"
+    exit 1
   fi      
 fi
 
@@ -243,7 +245,7 @@ fi
 #-f задаёт шаблон
 var_temp=$(grep -Fxiv -f $WORK_DIR/dppm/planr/.env $WORK_DIR/dppm/planr_old/planr/.env)
 
-#Чтение строк из temp_file
+#Чтение строк из var_file
 #IFS= отключает разделение строки на отдельные поля, убирает пробелы из строки
 #read —r читает строку из temp_file и сохраняет её в переменной replace_line
 #-r флаг отключает обработку символов экранирования
@@ -263,7 +265,7 @@ done <<< "$var_temp"
 if [ ${CRON_TASK} = true ]; then
   grep "dump.sh" /etc/crontab > /dev/null
   if [ $? -eq 0 ]; then
-    sed -i '/dump\.sh/c\0 3 * * * root $WORK_DIR/dppm/planr/scripts/dump.sh -c postgres -p $WORK_DIR/dppm/postgres_dump/ -r 14 -k 5' /etc/crontab
+    sed -i "/dump\.sh/c\0 3 * * * root $WORK_DIR/dppm/planr/scripts/dump.sh -c postgres -p $WORK_DIR/dppm/postgres_dump/ -r 14 -k 5" /etc/crontab
     echo "В crontab успешно добавлено новое задание для автоматического бэкапа базы данных"
   else
     #Комнда tee записывает вывод команды echo в файл /etc/crontab
