@@ -225,18 +225,6 @@ if [ ${LOGGING_DIR} = true ]; then
   fi  
 fi
 
-# Добавление задания в crontab, если флаг -c true
-if [ ${CRON_TASK} = true ]; then
-#Комнда tee записывает вывод команды echo в файл /etc/crontab
-#флаг -a указывает, что строка добавляется в конец файла
-echo "0 3 * * * root $WORK_DIR/dppm/planr/scripts/dump.sh -c postgres -p $WORK_DIR/dppm/postgres_dump/ -r 14 -k 5" | sudo tee -a /etc/crontab
-if [ $? -eq 0 ]; then
-  echo "В crontab успешно добавлено задание для автоматического бэкапа базы данных"
-else
-  echo "Ошибка! Не удалось добавить задание в crontab"
-  exit 1
-fi
-
 #Загруза образов
 echo "Загрузка образов"
 cd $WORK_DIR/dppm/images/
@@ -271,3 +259,17 @@ while IFS= read -r replace_line; do
   sed -i "s/^$var_name=.*/$replace_line/" /opt/dppm/planr/.env
 #Оператор <<< передаёт строку как стандартный ввод stdin в цикл while  
 done <<< "$var_temp"
+
+# Добавление задания в crontab, если флаг -c true
+if [ ${CRON_TASK} = true ]; then
+  grep "dump.sh" /etc/crontab > /dev/null
+  if [ $? -eq 0 ]; then
+    sed -i '/dump\.sh/c\0 3 * * * root $WORK_DIR/dppm/planr/scripts/dump.sh -c postgres -p $WORK_DIR/dppm/postgres_dump/ -r 14 -k 5' /etc/crontab
+    echo "В crontab успешно добавлено новое задание для автоматического бэкапа базы данных"
+  else
+    #Комнда tee записывает вывод команды echo в файл /etc/crontab
+    #флаг -a указывает, что строка добавляется в конец файла
+    echo "0 3 * * * root $WORK_DIR/dppm/planr/scripts/dump.sh -c postgres -p $WORK_DIR/dppm/postgres_dump/ -r 14 -k 5" | tee -a /etc/crontab
+    echo "В crontab успешно добавлено задание для автоматического бэкапа базы данных"  
+  fi
+fi 
