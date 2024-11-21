@@ -61,7 +61,7 @@ function create_planr_old_dir() {
         if [ $? -eq 0 ]; then
           echo "Каталог $WORK_DIR/dppm/planr_old создан"
         else
-          echo "Ошибка! Не удалось создать каталог развёртывания"
+          echo "Ошибка! Не удалось создать каталог planr_old"
           exit 1
         fi    
       fi      
@@ -138,7 +138,7 @@ if [ ${BACKUP} = true ]; then
     #Переходим в директорию со скриптами
     cd $WORK_DIR/dppm/planr/scripts
     #./dump.sh создаст бэкап базы данных на текущий момент
-    ./dump.sh -p /opt/dppm/postgres_dump
+    ./dump.sh -p $WORK_DIR/dppm/postgres_dump
     if [ $? -eq 0 ]; then
       echo "Бэкап базы данных успешно создан"
     else
@@ -172,7 +172,7 @@ if [ $? -eq 0 ]; then
   #Создаём директорию развёртывания
   create_planr_old_dir
   #Перенос текущего каталога разворота в planr_old
-  mv $WORK_DIR/dppm/planr $WORK_DIR/dppm/planr_old/planr
+  mv $WORK_DIR/dppm/planr $WORK_DIR/dppm/planr_old/
   if [ $? -eq 0 ]; then
     echo "Перенос текущего каталога разворота $WORK_DIR/dppm/planr в директорию $WORK_DIR/dppm/planr_old/planr выполнен успешно"
   else
@@ -206,7 +206,15 @@ else
   current_structure=($(ls -I "*.tgz" $FILE_PATH))
   if [ "${PLANR_STRUCTURE[*]}" == "${current_structure[*]}" ]; then
     #Создаём директорию развёртывания
-    create_install_dir
+    create_planr_old_dir
+    #Перенос текущего каталога разворота в planr_old
+    mv $WORK_DIR/dppm/planr $WORK_DIR/dppm/planr_old/
+    if [ $? -eq 0 ]; then
+      echo "Перенос текущего каталога разворота $WORK_DIR/dppm/planr в директорию $WORK_DIR/dppm/planr_old/planr выполнен успешно"
+    else
+      echo "Ошибка! Не удалось выполнить перенос текущего каталога разворота в директорию planr_old"
+      exit 1
+    fi 
     #Перемещаем содержимое $FILE_PATH
     mv $FILE_PATH/* $WORK_DIR/dppm/
   else
@@ -257,7 +265,7 @@ while IFS= read -r replace_line; do
   var_name=$(echo "$replace_line" | cut -d '=' -f 1)
   
   # Выполнение замены для каждой строки
-  sed -i "s/^$var_name=.*/$replace_line/" /opt/dppm/planr/.env
+  sed -i "s/^$var_name=.*/$replace_line/" $WORK_DIR/dppm/planr/.env
 #Оператор <<< передаёт строку как стандартный ввод stdin в цикл while  
 done <<< "$var_temp"
 
