@@ -43,21 +43,24 @@ function create_planr_old_dir() {
   if [ -e $FILE_PATH ]; then
     #Проверка,что директория WORK_DIR существует
     if [ -d $WORK_DIR ]; then
-      #Проверка, существует ли в целевой директории, ранее созданная папка planr_old/planr
-      if [ -d $WORK_DIR/dppm/planr_old/planr ]; then
-        echo "Обнаружена ранее созданная директория $WORK_DIR/dppm/planr_old/planr"
-        echo "Ранее созданная директория $WORK_DIR/dppm/planr_old/planr переименована в planr-$(date +%H:%M)"
-        mv -f $WORK_DIR/dppm/planr_old/planr $WORK_DIR/dppm/planr_old/planr-$(date +%H:%M)
+      #Проверка, существует ли в целевой директории, ранее созданная папка planr_old
+      if [ -d $WORK_DIR/dppm/planr_old ]; then
+        echo "Обнаружена ранее созданная директория $WORK_DIR/dppm/planr_old/"
+        #grep -w: флаг -w означает, что grep ищет точное совпадение
+        ls $WORK_DIR/dppm/planr_old | grep -w planr
         if [ $? -eq 0 ]; then
-         echo "Ранее созданная директория $WORK_DIR/dppm/planr_old/planr переименована в planr-$(date +%H:%M)"
-        else
-          echo "Ошибка! Не удалось переименовать директорию $WORK_DIR/dppm/planr_old/planr"
-          exit 1
-        fi        
+          mv -f $WORK_DIR/dppm/planr_old/planr $WORK_DIR/dppm/planr_old/planr_$(date +%y%m%d_%H:%M)
+          if [ $? -eq 0 ]; then
+            echo "Ранее созданная директория $WORK_DIR/dppm/planr_old/planr переименована в planr_$(date +%y%m%d%_H:%M)"
+          else
+            echo "Ошибка! Не удалось переименовать директорию $WORK_DIR/dppm/planr_old/planr"
+            exit 1
+          fi
+        fi          
       else
         #Создадим папку planr_old в директории $WORK_DIR/dppm/
         mkdir $WORK_DIR/dppm/planr_old
-        #проверка создания каталога развёртывания
+        #проверка создания каталога planr_old
         if [ $? -eq 0 ]; then
           echo "Каталог $WORK_DIR/dppm/planr_old создан"
         else
@@ -160,7 +163,7 @@ if [ $? -eq 0 ]; then
 fi  
 
 #Проверка, есть ли старая папка images
-ls $WORK_DIR/dppm | grep images
+ls $WORK_DIR/dppm | grep images > /dev/null
 if [ $? -eq 0 ]; then
   #Удаляем старую images
   rm -r $WORK_DIR/dppm/images
@@ -172,9 +175,9 @@ if [ $? -eq 0 ]; then
   #Создаём директорию развёртывания
   create_planr_old_dir
   #Перенос текущего каталога разворота в planr_old
-  mv $WORK_DIR/dppm/planr $WORK_DIR/dppm/planr_old/
+  mv $WORK_DIR/dppm/planr $WORK_DIR/dppm/planr_old
   if [ $? -eq 0 ]; then
-    echo "Перенос текущего каталога разворота $WORK_DIR/dppm/planr в директорию $WORK_DIR/dppm/planr_old/planr выполнен успешно"
+    echo "Перенос текущего каталога разворота $WORK_DIR/dppm/planr в директорию $WORK_DIR/dppm/planr_old выполнен успешно"
   else
     echo "Ошибка! Не удалось выполнить перенос текущего каталога разворота в директорию planr_old"
     exit 1
@@ -210,7 +213,7 @@ else
     #Перенос текущего каталога разворота в planr_old
     mv $WORK_DIR/dppm/planr $WORK_DIR/dppm/planr_old/
     if [ $? -eq 0 ]; then
-      echo "Перенос текущего каталога разворота $WORK_DIR/dppm/planr в директорию $WORK_DIR/dppm/planr_old/planr выполнен успешно"
+      echo "Перенос текущего каталога разворота $WORK_DIR/dppm/planr в директорию $WORK_DIR/dppm/planr_old выполнен успешно"
     else
       echo "Ошибка! Не удалось выполнить перенос текущего каталога разворота в директорию planr_old"
       exit 1
@@ -227,7 +230,19 @@ fi
 if [ ${LOGGING_DIR} = true ]; then
   if [ -d $WORK_DIR/dppm/planr_old/planr/logging/fluent-bit ] && [ -d $WORK_DIR/dppm/planr/logging ]; then
     cp -r $WORK_DIR/dppm/planr_old/planr/logging/fluent-bit $WORK_DIR/dppm/planr/logging
+    if [ $? -eq 0 ]; then
+      echo "Текущая конфигурация fluent-bit не обновлялась, потому что LOGGING_DIR=true"
+    else
+      echo "Ошибка! Не удалось сохранить текущую конфигурацию fluent-bit"
+      exit 1
+    fi    
     cp -r $WORK_DIR/dppm/planr_old/planr/logging/loki $WORK_DIR/dppm/planr/logging
+    if [ $? -eq 0 ]; then
+      echo "Текущая конфигурация loki не обновлялась, потому что LOGGING_DIR=true"
+    else
+      echo "Ошибка! Не удалось сохранить текущую конфигурацию loki"
+      exit 1
+    fi    
   else
     echo "Ошибка! Не удалось переместить папки fluent-bit и loki в директорию $WORK_DIR/dppm/planr/logging"
     echo "Проверьте наличие и содержимое целевых каталогов"
