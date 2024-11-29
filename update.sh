@@ -32,7 +32,7 @@ check_var() {
     echo "Ошибка! Не присвоено значение переменной $var_name в файле $SET_FILE или аргументу флага"
     exit 1
   else
-    echo "$var_value"
+    echo "$var_name=$var_value"
   fi
 }
 
@@ -47,11 +47,11 @@ function create_planr_old_dir() {
       if [ -d $WORK_DIR/dppm/planr_old ]; then
         echo "Обнаружена ранее созданная директория $WORK_DIR/dppm/planr_old/"
         #grep -w: флаг -w означает, что grep ищет точное совпадение
-        ls $WORK_DIR/dppm/planr_old | grep -w planr
+        ls $WORK_DIR/dppm/planr_old | grep -w planr > /dev/null
         if [ $? -eq 0 ]; then
           mv -f $WORK_DIR/dppm/planr_old/planr $WORK_DIR/dppm/planr_old/planr_$(date +%y%m%d_%H:%M)
           if [ $? -eq 0 ]; then
-            echo "Ранее созданная директория $WORK_DIR/dppm/planr_old/planr переименована в planr_$(date +%y%m%d%_H:%M)"
+            echo "Ранее созданная директория $WORK_DIR/dppm/planr_old/planr переименована в planr_$(date +%y%m%d_%H:%M)"
           else
             echo "Ошибка! Не удалось переименовать директорию $WORK_DIR/dppm/planr_old/planr"
             exit 1
@@ -76,6 +76,67 @@ function create_planr_old_dir() {
     echo "Ошибка! Архив с дистрибутивом или установочные файлы не найдены в указаной директории $FILE_PATH"
     exit 1
   fi  
+}
+
+#Функция парсит .env файл в ассоциативный массив
+function parse_env() {
+  #Объявляем ассоциативный массив с глобальной видимостью
+  declare -gA env_array
+  sed -i '$a\' $1
+  while IFS= read -r line; do
+    #Пропуск пустых строк и комментариев
+    if [[ -z "$line" || "$line" =~ ^# ]]; then
+      continue
+    fi
+
+    #Проверяем, что строка содержит =
+    if [[ "$line" == *=* ]]; then
+      #Получаем ключ из строки
+      key=$(echo "$line" | cut -d '=' -f 1)
+      #Получаем значение из строки
+      value=$(echo "$line" | cut -d '=' -f 2)
+      #Добавляем в ассоциатинвый массив ключи и значения
+      env_array["$key"]="$value"
+    fi
+  done < "$1"
+}
+
+#Функция для замены строки в файле .env
+function replace_line_in_file() {
+  local file="$1"
+  local line_num="$2"
+  local replacement="$3"
+
+  replacement_escaped=$(echo "$replacement" | sed -e 's/[\/&]/\\&/g')
+  #Замена строки в файле
+  sed -i "${line_num}s/.*/$replacement_escaped/" "$file"
+}
+
+#Функция добавляет новую строку в файл .env
+function add_new_line_to_file() {
+  local file="$1"
+  local new_line="$2"
+  #Добавление новой строки в конец файла. tee -a добавляет строку с переносом на новую строку
+  echo "$new_line" | tee -a "$file"
+}
+
+#Функция, которая ищет различия в папках planr и /planr_old/planr и добавляет
+#недостающие файли или папки из /planr_old/planr в planr
+function sync_diff_planr() {
+  local planr_new=$1
+  local planr_old=$2
+
+  #Команда diff для нахождения различий
+  diff_output=$(diff -r "$planr_new" "$planr_old")
+
+  #Если diff находит различия, копируем недостающие файлы или папки из planr_old в planr_new
+  if [[ ! -z "$diff_output" ]]; then
+    #rsync -av --ignore-existing копирует, только недостающие файлы или папки
+    rsync -av --ignore-existing "$planr_old/" "$planr_new/" > /dev/null
+    echo "Недостающие файлы и папки из "$planr_old" были скопированы в "$planr_new""
+  else
+    echo "Между "$planr_new" и  "$planr_old" различий не обнаружено"
+  fi
 }
 
 #Передача параметров командной строки в скрипт с помощью флагов  
@@ -258,31 +319,62 @@ if [ $? -eq 0 ]; then
 else
   echo "Ошибка! Образы не загружены"
   exit 1
-fi 
+fi
 
-# С помощью grep получаем строки, которые отличаются и сохраняем их в var_temp
-#-F обрабатывает строки как фиксированные (без регулярных выражений)
-#-x сопоставляет только строки целиком
-#-i игнорирует регистр
-#-v выводит строки, которые не совпадают
-#-f задаёт шаблон
-var_temp=$(grep -Fxiv -f $WORK_DIR/dppm/planr/.env $WORK_DIR/dppm/planr_old/planr/.env)
+#Вызываем функцию sync_diff_planr
+sync_diff_planr $WORK_DIR/dppm/planr $WORK_DIR/dppm/planr_old/planr
 
-#Чтение строк из var_file
-#IFS= отключает разделение строки на отдельные поля, убирает пробелы из строки
-#read —r читает строку из temp_file и сохраняет её в переменной replace_line
-#-r флаг отключает обработку символов экранирования
-#cut команда для извлечения части строки. флаг -d устанавливает '=' в качестве разделителя
-#флаг -f 1 указывает, что извлекается строка до символа '=', а не после
-#sed -i заменяет строку в файле .env
-while IFS= read -r replace_line; do
-  # Получаем имя переменной (ключ) из строки
-  var_name=$(echo "$replace_line" | cut -d '=' -f 1)
-  
-  # Выполнение замены для каждой строки
-  sed -i "s/^$var_name=.*/$replace_line/" $WORK_DIR/dppm/planr/.env
-#Оператор <<< передаёт строку как стандартный ввод stdin в цикл while  
-done <<< "$var_temp"
+#Парсим новый .env файл
+parse_env $WORK_DIR/dppm/planr/.env
+
+#Объявляем ассоц.массив env_array_new и заполняем его ключами env_array
+declare -A env_array_new
+for key in "${!env_array[@]}"; do
+  env_array_new["$key"]="${env_array[$key]}"
+done
+
+#Парсим старый .env файл
+parse_env $WORK_DIR/dppm/planr_old/planr/.env
+
+#Объявляем ассоц.массив env_array_old и заполняем его ключами env_array
+declare -A env_array_old
+for key in "${!env_array[@]}"; do
+  env_array_old["$key"]="${env_array[$key]}"
+done
+
+#Заполняем env_array_new данными из env_array_old
+for key in "${!env_array_old[@]}"; do
+  if [[ -z "${env_array_new[$key]}" || "${env_array_new[$key]}" != "${env_array_old[$key]}" ]]; then
+    echo "Значение для ключа "$key" отличается, перезаписываем"
+    env_array_new["$key"]="${env_array_old[$key]}"
+  fi
+done
+
+#Обновление файла ./1/.env
+line_counter=1
+while IFS= read -r line || [[ -n "$line" ]]; do
+  #Пропускаем комментарии
+  if [[ "$line" == \#* ]]; then
+    line_counter=$((line_counter + 1))
+    continue
+  fi
+
+  #Проверяем, содержит ли строка символ =
+  if [[ "$line" == *=* ]]; then
+    key=$(echo "$line" | cut -d '=' -f 1)
+    if [[ -n "${env_array_new[$key]}" ]]; then
+      replace_line_in_file $WORK_DIR/dppm/planr/.env "$line_counter" "$key=${env_array_new[$key]}"
+      unset env_array_new[$key]
+    fi
+  fi
+  line_counter=$((line_counter + 1))
+done < "$WORK_DIR/dppm/planr/.env"
+
+
+#Добавляем ключи, которые есть в старом .env файле, но нет в новом
+for key in "${!env_array_new[@]}"; do
+  add_new_line_to_file "$WORK_DIR/dppm/planr/.env" "$key=${env_array_new[$key]}"
+done
 
 # Добавление задания в crontab, если флаг -c true
 if [ ${CRON_TASK} = true ]; then
